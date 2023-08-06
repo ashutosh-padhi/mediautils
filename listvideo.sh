@@ -1,11 +1,30 @@
 #!/bin/bash
-TEMP=$(getopt -o h::l::d: --long help::,list::,maxdepth:,human:: -- "$@")
+TEMP=$(getopt -o h::d:r:: --long help::,maxdepth:,human::,size-ge:,duration-ge:,export: -- "$@")
 eval set -- "$TEMP"
 
 help(){
     cat <<EOF
--h | --help: to show this help message
--l | --list: to list all the video present
+-h
+--help
+  : to show this help message
+
+-d level
+--maxdepth <level>
+  : descend <level> of directories from the starting point
+
+--human
+  : show human friednly numbers and duration
+
+--size-ge <size>
+  : selects videos whose file size is greater than or equal
+    to <size>
+
+--duration-ge <duration>
+  : selects videos whose duraiton is greater than or equal
+    to <duration>
+
+--export <file>
+  : export result to a file with the name <file>
 EOF
 }
 
@@ -43,7 +62,12 @@ gen_file_list(){
 }
 
 listvideo(){
-    find "$1" -maxdepth $2 -type f -exec file -N -i -- {} + | sed -n 's!: video/[^:]*$!!p' \
+    startpoint=$1
+    if [[ $startpoint = 0 ]]
+    then
+	startpoint='.'
+    fi
+    find "$startpoint" $depthoption -type f $sizeoption -exec file -N -i -- {} + | sed -n 's!: video/[^:]*$!!p' \
 	| while IFS= read -r line; do
 	duration=$(ffprobe -i "$line" -show_entries format=duration -v quiet -of csv="p=0")
 	durationhuman=""
@@ -53,33 +77,61 @@ listvideo(){
 	fi
 	size=$(stat --format="%s" "$line")
 	sizehuman=$(echo $size | numfmt --to=iec)
-	if [[ $3 = 1 ]]
+	filename=$(basename "$line")
+	if [[ -n $durationlimit && $(echo "$duration < $durationlimit" | bc -l) = 1 ]]
 	then
-	    printf "$red%8s$reset $green%5s$reset  $cyan%s$reset\n" "$durationhuman" "$sizehuman" "$(basename "$line")" 
-	else
-	    printf "$red%10.2f$reset $green%12s$reset $cyan%s$reset\n" "$duration" "$size" "$(basename "$line")" 
+	    continue
 	fi
+	case "$action" in
+	    list)
+		if [[ $2 = 1 ]]
+		then
+	    	    printf "$red%8s$reset $green%5s$reset  $cyan%s$reset\n" "$durationhuman" "$sizehuman" "$filename" 
+		else
+	    	    printf "$red%10.2f$reset $green%12s$reset $cyan%s$reset\n" "$duration" "$size" "$filename" 
+		fi
+	    ;;
+	    export)
+		printf "\"%s\", \"%s\", %s, %s, %s, %s\n" "$line" "$filename" $size $sizehuman $duration $durationhuman >> $exportfile
+	    ;;
+	esac
     done
 }
 
-action=none
+action=list
 human=0
 maxdepth=1
+sizeoption=""
+durationlimit=""
+depthoption="-maxdepth 1"
+recurse=0
 while true; do
     case "$1" in
 	-h|--help)
 	    help; exit;;
-	-l|--list)
-	    action=list; shift 2;;
 	-d|--maxdepth)
-	    maxdepth=$2; shift 2;;
+	    maxdepth="-maxdepth $2"; shift 2;;
+	-r)
+	    recurse=1; shift 2;;
 	--human)
 	    human=1; shift 2;;
+	--size-ge)
+	    sizeoption="-size +$2"; shift 2;;
+	--duration-ge)
+	    durationlimit=$2; shift 2;;
+	--export)
+	    exportfile=$2;
+	    action=export;
+	    if [[ -f $exportfile ]]
+	    then
+		echo $exportfile already exists
+		exit;
+	    fi
+	    shift 2;;
 	--) shift; break;;
     esac
 done
 
-if [[ $action = list ]]
-then listvideo $1 $maxdepth $human
-fi
+if [[ $recurse = 1 ]]; then depthoption=""; fi
+listvideo $1 $human
 
