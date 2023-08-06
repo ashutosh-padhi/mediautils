@@ -9,6 +9,18 @@ help(){
 EOF
 }
 
+#---------- colors -----------
+black="\033[30m"
+red="\033[31m"
+green="\033[32m"
+yellow="\033[33m"
+blue="\033[34m"
+magenta="\033[35m"
+cyan="\033[36m"
+grey="\033[37m"
+reset="\033[0m"
+
+
 gen_file_list(){
     TIMESTAMP=$(date +%s)
     MOVIE_LIST="movie_list_$TIMESTAMP.csv"
@@ -43,9 +55,9 @@ listvideo(){
 	sizehuman=$(echo $size | numfmt --to=iec)
 	if [[ $3 = 1 ]]
 	then
-	    printf "%8s %5s %s\n" "$durationhuman" "$sizehuman" "$(basename "$line")" 
+	    printf "$red%8s$reset $green%5s$reset  $cyan%s$reset\n" "$durationhuman" "$sizehuman" "$(basename "$line")" 
 	else
-	    printf "%10.2f %12s %s\n" "$duration" "$size" "$(basename "$line")" 
+	    printf "$red%10.2f$reset $green%12s$reset $cyan%s$reset\n" "$duration" "$size" "$(basename "$line")" 
 	fi
     done
 }
